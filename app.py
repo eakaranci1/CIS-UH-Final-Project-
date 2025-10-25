@@ -14,7 +14,7 @@ connection = create_connection(
 
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"API running!"})
+    return jsonify({"message": "API running!"})
 
 # Ingredients: 
 @app.route("/ingredients", methods=["POST"])
