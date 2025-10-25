@@ -121,3 +121,49 @@ def update_recipe(rid):
 def delete_recipe(rid):
     ok, _, _ = execute_query(connection, "DELETE FROM recipe WHERE id=%s", (rid,))
     return ("", 204) if ok else (jsonify({"delete failed"}), 400)
+
+# RecipeIngredients 
+@app.route("/recipeingredients", methods=["POST"])
+def create_recipeingredient():
+    data = request.get_json() or {}
+    rid = data.get("recipeid")
+    iid = data.get("ingredientid")
+    amt = data.get("amount")
+    ok, last_id, _ = execute_query(connection, """
+        INSERT INTO recipeingredient (recipeid, ingredientid, amount) VALUES (%s,%s,%s)
+    """, (rid, iid, amt))
+    if not ok:
+        return jsonify({"insert failed"}), 400
+    row = execute_read_query(connection, "SELECT * FROM recipeingredient WHERE id=%s", (last_id,))
+    return jsonify(row[0]), 201
+
+@app.route("/recipeingredients", methods=["GET"])
+def list_recipeingredients():
+    rows = execute_read_query(connection, "SELECT * FROM recipeingredient")
+    return jsonify(rows)
+
+@app.route("/recipeingredients/<int:riid>", methods=["GET"])
+def get_recipeingredient(riid):
+    rows = execute_read_query(connection, "SELECT * FROM recipeingredient WHERE id=%s", (riid,))
+    return (jsonify(rows[0]), 200) if rows else (jsonify({"not found"}), 404)
+
+@app.route("/recipeingredients/<int:riid>", methods=["PUT"])
+def update_recipeingredient(riid):
+    data = request.get_json() or {}
+    fields, params = [], []
+    if "recipeid" in data: fields.append("recipeid=%s"); params.append(data["recipeid"])
+    if "ingredientid" in data: fields.append("ingredientid=%s"); params.append(data["ingredientid"])
+    if "amount" in data: fields.append("amount=%s"); params.append(data["amount"])
+    if not fields: return jsonify({"no fields"}), 400
+    params.append(riid)
+    ok, _, count = execute_query(connection,
+        f"UPDATE recipeingredient SET {', '.join(fields)} WHERE id=%s", tuple(params))
+    if not ok or count == 0: return jsonify({"update failed"}), 400
+    row = execute_read_query(connection, "SELECT * FROM recipeingredient WHERE id=%s", (riid,))
+    return jsonify(row[0])
+
+@app.route("/recipeingredients/<int:riid>", methods=["DELETE"])
+def delete_recipeingredient(riid):
+    ok, _, _ = execute_query(connection, "DELETE FROM recipeingredient WHERE id=%s", (riid,))
+    return ("", 204) if ok else (jsonify({"delete failed"}), 400)
+
