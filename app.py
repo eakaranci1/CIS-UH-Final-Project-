@@ -167,3 +167,51 @@ def delete_recipeingredient(riid):
     ok, _, _ = execute_query(connection, "DELETE FROM recipeingredient WHERE id=%s", (riid,))
     return ("", 204) if ok else (jsonify({"delete failed"}), 400)
 
+# Check & Cook
+@app.route("/recipes/<int:rid>/check", methods=["GET"])
+def check_recipe(rid):
+    items = execute_read_query(connection, """
+        SELECT ri.ingredientid, i.ingredientname, i.totalamount AS have, ri.amount AS need
+        FROM recipeingredient ri
+        JOIN ingredient i ON i.id = ri.ingredientid
+        WHERE ri.recipeid=%s
+    """, (rid,))
+    missing = [row for row in items if float(row["have"]) < float(row["need"])]
+    return jsonify({"recipeid": rid, "ok": len(missing) == 0, "missing": missing})
+
+@app.route("/recipes/<int:rid>/cook", methods=["POST"])
+def cook_recipe(rid):
+    try:
+        connection.start_transaction()
+        cur = connection.cursor(dictionary=True)
+        cur.execute("""
+            SELECT ri.ingredientid, i.totalamount AS have, ri.amount AS need
+            FROM recipeingredient ri
+            JOIN ingredient i ON i.id = ri.ingredientid
+            WHERE ri.recipeid=%s
+            FOR UPDATE
+        """, (rid,))
+        items = cur.fetchall()
+        if not items:
+            connection.rollback()
+            return jsonify({"error": "recipe has no ingredients"}), 400
+
+        for it in items:
+            if float(it["have"]) < float(it["need"]):
+                connection.rollback()
+                return jsonify({"error": "insufficient inventory"}), 400
+
+        for it in items:
+            cur.execute(
+                "UPDATE ingredient SET totalamount = totalamount - %s WHERE id=%s",
+                (float(it["need"]), int(it["ingredientid"]))
+            )
+        connection.commit()
+        cur.close()
+        return jsonify({"status": "cooked", "recipeid": rid})
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":  
+    app.run(debug=True)
